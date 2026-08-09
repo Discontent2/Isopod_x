@@ -1,0 +1,28 @@
+"""Global configuration constants for isopod_x."""
+
+SCREEN_WIDTH: int = 480
+SCREEN_HEIGHT: int = 270
+
+WINDOW_SCALE: int = 3
+WINDOW_WIDTH: int = SCREEN_WIDTH * WINDOW_SCALE
+WINDOW_HEIGHT: int = SCREEN_HEIGHT * WINDOW_SCALE
+
+FPS: int = 60
+TILE_SIZE: int = 16
+
+BLACK: int = 0x000000
+NAVY: int = 0x000080
+BLUE: int = 0x0000FF
+GREEN: int = 0x008000
+TEAL: int = 0x008080
+LIME: int = 0x00FF00
+CYAN: int = 0x00FFFF
+MAROON: int = 0x800000
+PURPLE: int = 0x800080
+OLIVE: int = 0x808000
+GRAY: int = 0x808080
+SILVER: int = 0xC0C0C0
+RED: int = 0xFF0000
+MAGENTA: int = 0xFF00FF
+YELLOW: int = 0xFFFF00
+WHITE: int = 0xFFFFFF
