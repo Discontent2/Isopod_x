@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="ISOPOD_X Level 0 browser prototype with keyboard and touch controls.">
+<title>ISOPOD_X — Level 0: Home Base — Touch Controls Review</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+  * { box-sizing:border-box; }
+  html, body {
+    margin:0; padding:0; height:100%; background:#000; overflow:hidden;
+    font-family:'Press Start 2P', monospace;
+  }
+  #app {
+    position:relative; width:100%; height:100vh; display:flex;
+    align-items:center; justify-content:center; background:#000;
+  }
+  #room {
+    position:relative; height:100vh; max-width:100%;
+    aspect-ratio:1672 / 941; overflow:hidden;
+  }
+  #roomBg {
+    position:absolute; inset:0; width:100%; height:100%; display:block;
+    image-rendering:pixelated; user-select:none; pointer-events:none;
+  }
+
+  #player {
+    position:absolute;
+    width:17.94%;   /* 300 / 1672 */
+    height:42.51%;  /* 400 / 941 */
+    transform-origin:50% 100%;
+    will-change:left, top, transform;
+    z-index:4;
+    pointer-events:none;
+  }
+  #player.flip { transform:scaleX(-1); }
+  #playerSprite {
+    width:100%; height:100%; display:block;
+    image-rendering:pixelated;
+    object-fit:contain;
+    object-position:center bottom;
+    filter:drop-shadow(0 7px 4px rgba(0,0,0,.55));
+  }
+
+  .prompt {
+    position:absolute; transform:translate(-50%, -100%);
+    background:rgba(10,8,20,.92); border:2px solid #ffcc00;
+    color:#ffcc00; padding:5px 8px; font-size:.60vw; white-space:nowrap;
+    opacity:0; transition:opacity .12s; pointer-events:none; z-index:8;
+    text-shadow:2px 2px 0 #000;
+  }
+  .prompt.show { opacity:1; pointer-events:auto; cursor:pointer; }
+
+  #hud {
+    position:absolute; top:2%; left:2%; z-index:9;
+    color:#66d9ff; font-size:.67vw; line-height:1.9;
+    text-shadow:2px 2px 0 #000;
+  }
+  #hudState { color:#ffcc00; }
+  #hpBarWrap {
+    width:14vw; height:.9vw; border:2px solid #66d9ff; margin-top:4px;
+    background:#090816;
+  }
+  #hpBar {
+    height:100%; width:100%;
+    background:linear-gradient(90deg,#ff5555,#ffcc00);
+    transition:width .4s;
+  }
+
+  #controlPanel {
+    position:absolute; top:2%; right:2%; z-index:9;
+    width:24%; padding:.65vw .8vw;
+    background:rgba(4,7,18,.78); border:2px solid #334e7c;
+    color:#9dcfff; font-size:.48vw; line-height:1.9;
+    text-shadow:2px 2px 0 #000;
+  }
+  #controlPanel strong { color:#ffcc00; }
+  #footerHint {
+    position:absolute; bottom:1.1%; left:1.5%; right:1.5%; z-index:9;
+    text-align:center; color:#9a9a9a; font-size:.49vw; line-height:1.7;
+    text-shadow:2px 2px 0 #000;
+  }
+
+  #flash {
+    position:absolute; inset:0; background:#fff; opacity:0;
+    pointer-events:none; z-index:30;
+  }
+  #flash.go { animation:flashOut .4s ease-out forwards; }
+  @keyframes flashOut {
+    0%{opacity:0} 30%{opacity:.9} 100%{opacity:0}
+  }
+
+  #modal {
+    position:absolute; inset:0; background:rgba(0,0,0,.85);
+    display:none; align-items:center; justify-content:center; z-index:40;
+  }
+  #modal.active { display:flex; }
+  #modalBox {
+    background:#0c0a18; border:3px solid #66d9ff; border-radius:6px;
+    padding:2.2vw 2.8vw; min-width:32vw; max-width:70vw;
+    box-shadow:0 0 30px rgba(102,217,255,.4);
+    text-align:center; color:#fff;
+  }
+  #modalTitle {
+    color:#ffcc00; font-size:1.1vw; margin-bottom:1.2vw; letter-spacing:2px;
+  }
+  #modalBody {
+    font-size:.75vw; line-height:2; color:#ccc; margin-bottom:1.4vw;
+  }
+  .weaponList {
+    display:flex; flex-direction:column; gap:.5vw; margin-bottom:1.2vw;
+  }
+  .weaponOpt {
+    border:2px solid #444; padding:.6vw; font-size:.75vw; cursor:pointer;
+    color:#aaa; text-align:left;
+  }
+  .weaponOpt.equipped { border-color:#ffcc00; color:#ffcc00; }
+  .weaponOpt.focused { border-color:#66d9ff; color:#fff; background:#101a31; }
+  #modalClose {
+    font-size:.7vw; color:#66d9ff; border:2px solid #66d9ff;
+    padding:.5vw 1.2vw; display:inline-block; cursor:pointer; background:none;
+  }
+  #modalClose:hover { background:#66d9ff; color:#000; }
+
+  #touchControls {
+    position:absolute; inset:0; z-index:20; pointer-events:none;
+    user-select:none; -webkit-user-select:none; touch-action:none;
+  }
+  .touchCluster {
+    position:absolute; bottom:3.3%; display:flex; align-items:flex-end;
+    gap:clamp(8px, .7vw, 14px); pointer-events:none;
+  }
+  #touchMove { left:2.2%; }
+  #touchAction { right:2.2%; }
+  .touchStack {
+    display:flex; flex-direction:column; gap:clamp(8px, .7vw, 14px);
+    pointer-events:none;
+  }
+  .touchBtn {
+    width:clamp(58px, 6.2vw, 96px);
+    height:clamp(58px, 6.2vw, 96px);
+    border:2px solid rgba(102,217,255,.80);
+    background:rgba(5,10,24,.56);
+    color:#d8f5ff;
+    display:flex; align-items:center; justify-content:center;
+    text-align:center; line-height:1.25;
+    font-family:'Press Start 2P', monospace;
+    font-size:clamp(10px, .62vw, 14px);
+    text-shadow:2px 2px 0 #000;
+    box-shadow:inset 0 0 16px rgba(102,217,255,.12),
+               0 3px 0 rgba(0,0,0,.55);
+    border-radius:18%;
+    pointer-events:auto;
+    touch-action:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .touchBtn.wide { width:clamp(72px, 7.4vw, 116px); }
+  .touchBtn.accent {
+    border-color:rgba(255,204,0,.88); color:#ffe875;
+    background:rgba(30,22,4,.58);
+  }
+  .touchBtn.roll {
+    border-color:rgba(184,120,255,.9); color:#dfc1ff;
+    background:rgba(24,8,38,.58);
+  }
+  .touchBtn.pressed {
+    transform:translateY(3px) scale(.97);
+    background:rgba(32,82,112,.78);
+    box-shadow:inset 0 0 22px rgba(102,217,255,.35);
+  }
+  .touchBtn.roll.pressed { background:rgba(72,32,98,.82); }
+  .touchBtn.accent.pressed { background:rgba(98,75,12,.82); }
+  #touchDown { margin-left:clamp(10px, 1vw, 18px); }
+  #touchControls.modalBlocked { opacity:.22; }
+  #touchControls.modalBlocked .touchBtn { pointer-events:none; }
+
+  @media (hover:hover) and (pointer:fine) {
+    #touchControls { opacity:.52; }
+    .touchBtn:hover { opacity:1; }
+  }
+
+  @media (max-width:900px), (max-height:620px) {
+    #controlPanel { display:none; }
+    #footerHint { display:none; }
+    #hud { font-size:clamp(8px, 1.35vw, 13px); }
+    #hpBarWrap { width:24vw; height:1.8vw; }
+  }
+
+  @media (max-aspect-ratio:1672/941) {
+    #room { width:100vw; height:auto; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="room">
+    <img id="roomBg" src="assets/room_background.webp" alt="Level 0 home base">
+    <div id="player"><img id="playerSprite" alt="Isopod-X"></div>
+
+    <div id="hud">
+      LEVEL 0 — HOME BASE<br>
+      WEAPON: <span id="hudWeapon">PLASMA CLAW</span><br>
+      STATE: <span id="hudState">IDLE</span>
+      <div id="hpBarWrap"><div id="hpBar"></div></div>
+    </div>
+
+    <div id="controlPanel">
+      <strong>MOVEMENT MAP</strong><br>
+      A / D or ← / → : RUN<br>
+      W / ↑ / SPACE : JUMP<br>
+      S / ↓ : CROUCH<br>
+      S / ↓ + MOVE : CRAWL<br>
+      SHIFT / R + MOVE : ROLL<br>
+      E / ENTER : INTERACT<br>
+      ESC : CLOSE MENU<br>
+      TOUCH : FLOATING CONTROLS
+    </div>
+
+    <div id="footerHint">
+      RUN ← A / D → &nbsp;•&nbsp; JUMP W / ↑ / SPACE &nbsp;•&nbsp;
+      CROUCH/CRAWL S / ↓ &nbsp;•&nbsp; ROLL SHIFT / R &nbsp;•&nbsp;
+      INTERACT E / ENTER &nbsp;•&nbsp; TOUCH CONTROLS ACTIVE
+    </div>
+
+    <div id="touchControls" aria-label="Touch controls">
+      <div id="touchMove" class="touchCluster">
+        <button id="touchLeft" class="touchBtn" data-hold="ArrowLeft" aria-label="Move left">◀</button>
+        <div class="touchStack">
+          <button id="touchDown" class="touchBtn" data-hold="ArrowDown" aria-label="Crouch or crawl">▼<br>CROUCH</button>
+        </div>
+        <button id="touchRight" class="touchBtn" data-hold="ArrowRight" aria-label="Move right">▶</button>
+      </div>
+
+      <div id="touchAction" class="touchCluster">
+        <div class="touchStack">
+          <button id="touchRoll" class="touchBtn wide roll" data-hold="ShiftLeft" aria-label="Roll">ROLL</button>
+          <button id="touchUse" class="touchBtn wide accent" data-action="interact" aria-label="Interact">USE</button>
+        </div>
+        <button id="touchJump" class="touchBtn wide accent" data-action="jump" aria-label="Jump">JUMP</button>
+      </div>
+    </div>
+
+    <div id="flash"></div>
+
+    <div id="modal">
+      <div id="modalBox">
+        <div id="modalTitle"></div>
+        <div id="modalBody"></div>
+        <div id="weaponList" class="weaponList"></div>
+        <div id="modalClose">CLOSE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const room = document.getElementById('room');
+  const player = document.getElementById('player');
+  const playerSprite = document.getElementById('playerSprite');
+  const flash = document.getElementById('flash');
+  const modal = document.getElementById('modal');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalBody = document.getElementById('modalBody');
+  const weaponList = document.getElementById('weaponList');
+  const modalClose = document.getElementById('modalClose');
+  const hpBar = document.getElementById('hpBar');
+  const hudWeapon = document.getElementById('hudWeapon');
+  const hudState = document.getElementById('hudState');
+
+  const FRAME_ATLAS_URL = 'assets/x_frames_atlas.webp';
+  const FRAME_ATLAS_CELL_W = 208;
+  const FRAME_ATLAS_CELL_H = 256;
+  const FRAME_SIZES = [[[179,251],[179,251],[179,251],[180,251],[179,251],[179,251],[179,251]],[[179,251],[179,251],[179,251],[180,251],[179,251],[179,251],[179,251]],[[179,250],[179,250],[179,250],[180,250],[179,250],[179,250],[179,250]],[[208,256],[208,256],[208,256],[208,256],[208,256],[208,256]],[[208,256],[208,256],[208,256],[208,256],[208,256],[208,256]]];
+  let RAW_FRAMES = [];
+
+  let FRAMES = [];
+  let FRAME_CANVAS_W = 192;
+  let FRAME_CANVAS_H = 256;
+
+  const ROOM_W = 1672;
+  const ROOM_H = 941;
+  const SPRITE_BOX_W = 300;
+  const SPRITE_BOX_H = 400;
+
+  let FLOOR_LEFT = 145;
+  let FLOOR_RIGHT = 1560;
+  const FLOOR_Y = 780;
+
+  const RUN_SPEED = 390;      // artwork px / second
+  const CRAWL_SPEED = 190;
+  const ROLL_SPEED = 540;
+  const GRAVITY = 1900;
+  const JUMP_VELOCITY = -760;
+  const FIXED_DT = 1 / 60;
+  const LAND_TIME = 0.10;
+  const JUMP_TAKEOFF_TIME = 0.075;
+  const CRAWL_ENTER_TIME = 0.08;
+  const ROLL_START_TIME = 0.12;
+  const ROLL_STOP_TIME = 0.12;
+  const ROLL_ACCEL = 3200;
+  const ROLL_BRAKE = 2800;
+  const IDLE_FRAMES = [0, 1];
+  const RUN_FRAMES = [0, 1, 2, 3, 4, 5, 6];
+  // Crawl and roll are six hand-extracted sprites from the master sheet.
+  // They are already aligned to the same 208x256 bottom-center canvas.
+  const PREALIGNED_ROWS = new Set([3, 4]);
+  const CRAWL_ENTER_FRAMES = [0, 1, 2];
+  const CRAWL_ACTIVE_FRAMES = [2, 3, 4, 5];
+  const ROLL_ENTER_FRAMES = [0, 1];
+  const ROLL_ACTIVE_FRAMES = [1, 2, 3, 4, 5];
+  const ROLL_STOP_FRAMES = [1, 0];
+
+  let assetsReady = false;
+  let rollDir = 1;
+  let rollVelocity = 0;
+  let pingPongIndex = 0;
+  let pingPongDir = 1;
+  let pingPongTimer = 0;
+
+  let footX = 722;
+  let footY = FLOOR_Y;
+  let vx = 0;
+  let vy = 0;
+  let grounded = true;
+  let facingLeft = false;
+  let interacting = false;
+  let state = 'IDLE';
+  let stateTime = 0;
+  let animTime = 0;
+  let lastFrameKey = '';
+
+  const keys = new Set();
+  const touchControls = document.getElementById('touchControls');
+  const touchPointerKeys = new Map();
+
+  const zones = [
+    { id:'bed',  xMin:100,  xMax:430,  label:'BED — REST' },
+    { id:'desk', xMin:930,  xMax:1240, label:'TERMINAL — SAVE' },
+    { id:'pod',  xMin:1360, xMax:1560, label:'WEAPON POD — EQUIP' }
+  ];
+
+  const prompts = {};
+  zones.forEach(z => {
+    const p = document.createElement('div');
+    p.className = 'prompt';
+    p.textContent = '▲ ' + z.label + '  [E]';
+    room.appendChild(p);
+    prompts[z.id] = p;
+  });
+
+  const weapons = [
+    { id:'claw', name:'PLASMA CLAW', desc:'Fast melee arc. Low power, no cooldown.' },
+    { id:'blaster', name:'PULSE BLASTER', desc:'Ranged shot. Balanced power and speed.' },
+    { id:'drill', name:'DRILL FIST', desc:'Heavy charge attack. Breaks armored foes.' }
+  ];
+  let equippedWeapon = 'claw';
+  let weaponFocus = 0;
+
+  function beep(freq=440, dur=.05, type='square') {
+    try {
+      const ctx = beep.ctx || (beep.ctx = new (window.AudioContext || window.webkitAudioContext)());
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = freq;
+      gain.gain.value = .045;
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
+    } catch (_) {}
+  }
+
+  function down(...codes) {
+    return codes.some(code => keys.has(code));
+  }
+
+  function setState(next) {
+    if (next === state) return;
+    state = next;
+    stateTime = 0;
+    animTime = 0;
+    pingPongIndex = 0;
+    pingPongDir = 1;
+    pingPongTimer = 0;
+    hudState.textContent = next;
+  }
+
+  function createCanvas(w, h) {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    return canvas;
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  async function loadFrameAtlasSources() {
+    const atlas = await loadImage(FRAME_ATLAS_URL);
+    return FRAME_SIZES.map((row, rowIndex) =>
+      row.map(([width, height], colIndex) => {
+        const canvas = createCanvas(width, height);
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, width, height);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          atlas,
+          colIndex * FRAME_ATLAS_CELL_W,
+          rowIndex * FRAME_ATLAS_CELL_H,
+          width,
+          height,
+          0,
+          0,
+          width,
+          height,
+        );
+        return canvas.toDataURL('image/png');
+      })
+    );
+  }
+
+  function getImageDataFromSource(source) {
+    const canvas = createCanvas(source.width, source.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(source, 0, 0);
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }
+
+  function getOpaqueMetrics(img) {
+    const image = getImageDataFromSource(img);
+    const data = image.data;
+    const width = image.width;
+    const height = image.height;
+
+    let left = width;
+    let right = -1;
+    let top = height;
+    let bottom = -1;
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3] > 0) {
+          if (x < left) left = x;
+          if (x > right) right = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
+    }
+
+    if (right < left || bottom < top) {
+      return {
+        left: 0,
+        top: 0,
+        width: img.width,
+        height: img.height,
+        pivotX: img.width / 2,
+      };
+    }
+
+    const boxWidth = right - left + 1;
+    const boxHeight = bottom - top + 1;
+    const footBandStart = Math.min(bottom, Math.floor(top + boxHeight * 0.65));
+    let footLeft = width;
+    let footRight = -1;
+
+    for (let y = footBandStart; y <= bottom; y++) {
+      for (let x = left; x <= right; x++) {
+        if (data[(y * width + x) * 4 + 3] > 0) {
+          if (x < footLeft) footLeft = x;
+          if (x > footRight) footRight = x;
+        }
+      }
+    }
+
+    const pivotX = footRight >= footLeft
+      ? (footLeft + footRight + 1) / 2
+      : (left + right + 1) / 2;
+
+    return {
+      left,
+      top,
+      width: boxWidth,
+      height: boxHeight,
+      pivotX,
+    };
+  }
+
+  function findOpaqueComponents(image) {
+    const { data, width, height } = image;
+    const visited = new Uint8Array(width * height);
+    const components = [];
+    const neighbors = [-1, 0, 1];
+
+    function alphaAtIndex(index) {
+      return data[index * 4 + 3] > 0;
+    }
+
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const startIndex = y * width + x;
+        if (visited[startIndex] || !alphaAtIndex(startIndex)) continue;
+
+        const stack = [startIndex];
+        visited[startIndex] = 1;
+        const pixels = [];
+        let left = x;
+        let right = x;
+        let top = y;
+        let bottom = y;
+
+        while (stack.length) {
+          const index = stack.pop();
+          const px = index % width;
+          const py = (index / width) | 0;
+          pixels.push(index);
+
+          if (px < left) left = px;
+          if (px > right) right = px;
+          if (py < top) top = py;
+          if (py > bottom) bottom = py;
+
+          for (const oy of neighbors) {
+            for (const ox of neighbors) {
+              if (ox === 0 && oy === 0) continue;
+              const nx = px + ox;
+              const ny = py + oy;
+              if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+              const nextIndex = ny * width + nx;
+              if (visited[nextIndex] || !alphaAtIndex(nextIndex)) continue;
+              visited[nextIndex] = 1;
+              stack.push(nextIndex);
+            }
+          }
+        }
+
+        components.push({
+          pixels,
+          area: pixels.length,
+          left,
+          right,
+          top,
+          bottom,
+          width: right - left + 1,
+          height: bottom - top + 1,
+          centerX: (left + right + 1) / 2,
+          centerY: (top + bottom + 1) / 2,
+        });
+      }
+    }
+
+    return components;
+  }
+
+  function selectPrimaryComponent(components, imageWidth, imageHeight) {
+    if (!components.length) return null;
+    const midX = imageWidth / 2;
+    const baseline = imageHeight;
+    let best = components[0];
+    let bestScore = -Infinity;
+
+    for (const comp of components) {
+      const areaScore = comp.area * 1000;
+      const bottomBias = comp.bottom * 4;
+      const centerPenalty = Math.abs(comp.centerX - midX) * 6;
+      const baselinePenalty = Math.abs(comp.bottom - baseline) * 2;
+      const score = areaScore + bottomBias - centerPenalty - baselinePenalty;
+      if (score > bestScore) {
+        bestScore = score;
+        best = comp;
+      }
+    }
+    return best;
+  }
+
+  function buildComponentCanvas(image, component) {
+    const canvas = createCanvas(component.width, component.height);
+    const ctx = canvas.getContext('2d');
+    const out = ctx.createImageData(component.width, component.height);
+
+    for (const index of component.pixels) {
+      const sx = index % image.width;
+      const sy = (index / image.width) | 0;
+      const srcOffset = index * 4;
+      const dx = sx - component.left;
+      const dy = sy - component.top;
+      const dstOffset = (dy * component.width + dx) * 4;
+      out.data[dstOffset] = image.data[srcOffset];
+      out.data[dstOffset + 1] = image.data[srcOffset + 1];
+      out.data[dstOffset + 2] = image.data[srcOffset + 2];
+      out.data[dstOffset + 3] = image.data[srcOffset + 3];
+    }
+
+    ctx.putImageData(out, 0, 0);
+    return canvas;
+  }
+
+  function sanitizeAutoFrame(img) {
+    const image = getImageDataFromSource(img);
+    const components = findOpaqueComponents(image);
+    const primary = selectPrimaryComponent(components, image.width, image.height);
+    if (!primary) {
+      return { sprite: img, metrics: getOpaqueMetrics(img) };
+    }
+    const sprite = buildComponentCanvas(image, primary);
+    return { sprite, metrics: getOpaqueMetrics(sprite) };
+  }
+
+  function snapUp(value, step, minimum) {
+    return Math.max(minimum, Math.ceil(value / step) * step);
+  }
+
+  async function preprocessFrames(rawFrames) {
+    const processed = rawFrames.map(row => new Array(row.length));
+    const records = [];
+    let layoutMaxW = 0;
+    let layoutMaxH = 0;
+    let boundsMaxW = 0;
+
+    for (let row = 0; row < rawFrames.length; row++) {
+      for (let col = 0; col < rawFrames[row].length; col++) {
+        const img = await loadImage(rawFrames[row][col]);
+
+        if (PREALIGNED_ROWS.has(row)) {
+          const metrics = getOpaqueMetrics(img);
+          boundsMaxW = Math.max(boundsMaxW, metrics.width);
+          processed[row][col] = rawFrames[row][col];
+          continue;
+        }
+
+        const cleaned = sanitizeAutoFrame(img);
+        const metrics = cleaned.metrics;
+        boundsMaxW = Math.max(boundsMaxW, metrics.width);
+        records.push({ row, col, sprite: cleaned.sprite, metrics });
+        layoutMaxW = Math.max(layoutMaxW, metrics.width);
+        layoutMaxH = Math.max(layoutMaxH, metrics.height);
+      }
+    }
+
+    FRAME_CANVAS_W = snapUp(layoutMaxW + 28, 8, 192);
+    FRAME_CANVAS_H = snapUp(layoutMaxH + 16, 8, 256);
+
+    const pivotX = FRAME_CANVAS_W / 2;
+    const pivotY = FRAME_CANVAS_H - 4;
+
+    for (const rec of records) {
+      const { row, col, sprite, metrics } = rec;
+      const canvas = createCanvas(FRAME_CANVAS_W, FRAME_CANVAS_H);
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, FRAME_CANVAS_W, FRAME_CANVAS_H);
+      ctx.imageSmoothingEnabled = false;
+
+      const dx = Math.round(pivotX - metrics.pivotX);
+      const dy = Math.round(pivotY - metrics.height);
+
+      ctx.drawImage(sprite, dx, dy, metrics.width, metrics.height);
+      processed[row][col] = canvas.toDataURL('image/png');
+    }
+
+    return { frames: processed, maxVisibleW: boundsMaxW };
+  }
+
+  function applySpriteBounds(maxVisibleW) {
+    const scale = SPRITE_BOX_W / FRAME_CANVAS_W;
+    const visibleHalfW = Math.ceil((maxVisibleW * scale) / 2);
+    FLOOR_LEFT = visibleHalfW + 8;
+    FLOOR_RIGHT = ROOM_W - visibleHalfW - 8;
+    footX = Math.max(FLOOR_LEFT, Math.min(FLOOR_RIGHT, footX));
+  }
+
+  function selectFrame(row, col) {
+    if (!assetsReady || !FRAMES[row]) return;
+    col = Math.max(0, Math.min(FRAMES[row].length - 1, col));
+    const key = row + ':' + col;
+    if (key === lastFrameKey) return;
+    lastFrameKey = key;
+    playerSprite.src = FRAMES[row][col];
+  }
+
+  function frameFromLoop(sequence, fps) {
+    return sequence[Math.floor(animTime * fps) % sequence.length];
+  }
+
+  function frameFromTransition(sequence, duration) {
+    const progress = Math.min(0.999, stateTime / duration);
+    const index = Math.min(sequence.length - 1, Math.floor(progress * sequence.length));
+    return sequence[index];
+  }
+
+  // Crawl and roll use this instead of modulo/wraparound looping.
+  // When an endpoint is reached, frame direction reverses, so the visible
+  // sequence walks back through adjacent poses instead of snapping to frame 0.
+  function advancePingPong(sequence, fps, dt) {
+    if (sequence.length <= 1) return sequence[0] || 0;
+    pingPongTimer += dt;
+    const frameDuration = 1 / fps;
+
+    while (pingPongTimer >= frameDuration) {
+      pingPongTimer -= frameDuration;
+      pingPongIndex += pingPongDir;
+
+      if (pingPongIndex >= sequence.length - 1) {
+        pingPongIndex = sequence.length - 1;
+        pingPongDir = -1;
+      } else if (pingPongIndex <= 0) {
+        pingPongIndex = 0;
+        pingPongDir = 1;
+      }
+    }
+
+    return sequence[pingPongIndex];
+  }
+
+  function isRollState(name = state) {
+    return name === 'ROLL_START' || name === 'ROLL' || name === 'ROLL_STOP';
+  }
+
+  function updateAnimation(dt) {
+    stateTime += dt;
+    animTime += dt;
+
+    if (state === 'IDLE') {
+      const frame = IDLE_FRAMES[Math.floor(animTime * 1.75) % IDLE_FRAMES.length];
+      selectFrame(0, frame);
+    } else if (state === 'RUN') {
+      selectFrame(1, frameFromLoop(RUN_FRAMES, 10));
+    } else if (state === 'JUMP_START') {
+      // Dedicated planted takeoff pose. X stays on the floor until the
+      // takeoff timer finishes, then physics launches him.
+      selectFrame(2, 0);
+    } else if (state === 'JUMP') {
+      let f = 1;
+      if (stateTime < 0.05) f = 1;
+      else if (vy < -480) f = 1;
+      else if (vy < -180) f = 2;
+      else if (vy < 40) f = 3;
+      else if (vy < 240) f = 4;
+      else if (vy < 520) f = 5;
+      else f = 6;
+      selectFrame(2, f);
+    } else if (state === 'LAND') {
+      selectFrame(2, 6);
+    } else if (state === 'CROUCH') {
+      selectFrame(3, 0);
+    } else if (state === 'CRAWL_START') {
+      selectFrame(3, frameFromTransition(CRAWL_ENTER_FRAMES, CRAWL_ENTER_TIME));
+    } else if (state === 'CRAWL') {
+      // These are complete, independently extracted crawl poses. The player
+      // position supplies locomotion; the art stays fixed to its body pivot.
+      selectFrame(3, advancePingPong(CRAWL_ACTIVE_FRAMES, 7, dt));
+    } else if (state === 'ROLL_START') {
+      selectFrame(4, frameFromTransition(ROLL_ENTER_FRAMES, ROLL_START_TIME));
+    } else if (state === 'ROLL') {
+      // Ball frames are centered on the shell, not the dust trail, so the
+      // visual body no longer walks sideways inside its animation canvas.
+      selectFrame(4, advancePingPong(ROLL_ACTIVE_FRAMES, 11, dt));
+    } else if (state === 'ROLL_STOP') {
+      selectFrame(4, frameFromTransition(ROLL_STOP_FRAMES, ROLL_STOP_TIME));
+    }
+  }
+
+  function render() {
+
+
+
+    const leftPct = ((footX - SPRITE_BOX_W / 2) / ROOM_W) * 100;
+    const topPct = ((footY - SPRITE_BOX_H) / ROOM_H) * 100;
+    player.style.left = leftPct + '%';
+    player.style.top = topPct + '%';
+    player.classList.toggle('flip', facingLeft);
+  }
+
+  function currentZone() {
+    if (!grounded || isRollState()) return null;
+    return zones.find(z => footX >= z.xMin && footX <= z.xMax) || null;
+  }
+
+  function updatePrompts() {
+    const z = currentZone();
+    zones.forEach(zz => prompts[zz.id].classList.remove('show'));
+    if (!z || interacting) return;
+
+    const p = prompts[z.id];
+    p.style.left = (footX / ROOM_W * 100) + '%';
+    p.style.top = ((footY - 275) / ROOM_H * 100) + '%';
+    p.classList.add('show');
+  }
+
+  function renderWeaponOptions() {
+    [...weaponList.children].forEach((el, i) => {
+      el.classList.toggle('focused', i === weaponFocus);
+    });
+  }
+
+  function equipFocusedWeapon() {
+    const w = weapons[weaponFocus];
+    if (!w) return;
+    equippedWeapon = w.id;
+    hudWeapon.textContent = w.name;
+    beep(880, .08, 'triangle');
+    openModal('WEAPON POD', 'Select a loadout for the next mission:', true);
+  }
+
+  function openModal(title, bodyHtml, showWeapons) {
+    interacting = true;
+    keys.clear();
+    vx = 0;
+    modalTitle.textContent = title;
+    modalBody.innerHTML = bodyHtml;
+    weaponList.innerHTML = '';
+
+    if (showWeapons) {
+      weaponFocus = Math.max(0, weapons.findIndex(w => w.id === equippedWeapon));
+      weapons.forEach((w, i) => {
+        const opt = document.createElement('div');
+        opt.className = 'weaponOpt' + (w.id === equippedWeapon ? ' equipped' : '');
+        opt.innerHTML = '<strong>' + w.name + '</strong><br><span style="font-size:.65vw;color:#888;">' + w.desc + '</span>';
+        opt.addEventListener('mouseenter', () => {
+          weaponFocus = i;
+          renderWeaponOptions();
+        });
+        opt.addEventListener('click', () => {
+          weaponFocus = i;
+          equipFocusedWeapon();
+        });
+        weaponList.appendChild(opt);
+      });
+      renderWeaponOptions();
+    }
+
+    modal.classList.add('active');
+    touchControls.classList.add('modalBlocked');
+  }
+
+  function closeModal() {
+    modal.classList.remove('active');
+    interacting = false;
+    keys.clear();
+    touchPointerKeys.clear();
+    touchControls.querySelectorAll('.pressed').forEach(btn => btn.classList.remove('pressed'));
+    touchControls.classList.remove('modalBlocked');
+  }
+
+  modalClose.addEventListener('click', () => {
+    beep(220, .05);
+    closeModal();
+  });
+
+  function doRest() {
+    beep(523, .10);
+    setTimeout(() => beep(659, .10), 100);
+    setTimeout(() => beep(784, .15), 200);
+    hpBar.style.width = '100%';
+    flash.classList.remove('go');
+    void flash.offsetWidth;
+    flash.classList.add('go');
+    openModal('RESTING...', 'Systems recharged.<br>HP fully restored.', false);
+  }
+
+  function doSave() {
+    beep(660, .08);
+    setTimeout(() => beep(880, .12), 90);
+    try {
+      localStorage.setItem('isopod_x_level0', JSON.stringify({
+        footX, equippedWeapon, savedAt:Date.now()
+      }));
+    } catch (_) {}
+    openModal('SAVE POINT', 'Game data saved.<br>You may power down safely.', false);
+  }
+
+  function doWeapon() {
+    beep(440, .06);
+    openModal('WEAPON POD', 'Select a loadout for the next mission:<br><span style="color:#777">↑ ↓ navigate · ENTER equip</span>', true);
+  }
+
+  function interact() {
+    const z = currentZone();
+    if (!z || interacting) return;
+    if (z.id === 'bed') doRest();
+    else if (z.id === 'desk') doSave();
+    else if (z.id === 'pod') doWeapon();
+  }
+
+  function beginJump() {
+    if (!grounded || interacting || isRollState()) return;
+    if (down('ShiftLeft', 'ShiftRight', 'KeyR')) return;
+    vy = 0;
+    setState('JUMP_START');
+    beep(330, .045, 'square');
+  }
+
+  function groundedStateFromInput(dir, crouch, roll) {
+    if (roll && dir !== 0) return 'ROLL_START';
+    if (crouch && dir !== 0) return 'CRAWL_START';
+    if (crouch) return 'CROUCH';
+    if (dir !== 0) return 'RUN';
+    return 'IDLE';
+  }
+
+  function updatePhysics(dt) {
+    if (!assetsReady) return;
+
+    if (interacting) {
+      vx = 0;
+      updateAnimation(dt);
+      render();
+      updatePrompts();
+      return;
+    }
+
+    const left = down('ArrowLeft', 'KeyA');
+    const right = down('ArrowRight', 'KeyD');
+    const crouch = down('ArrowDown', 'KeyS');
+    const roll = down('ShiftLeft', 'ShiftRight', 'KeyR');
+    const dir = (right ? 1 : 0) - (left ? 1 : 0);
+
+    if (!isRollState()) {
+      if (dir < 0) facingLeft = true;
+      else if (dir > 0) facingLeft = false;
+    }
+
+    if (!grounded) {
+      vx = dir * RUN_SPEED * 0.72;
+      if (dir < 0) facingLeft = true;
+      else if (dir > 0) facingLeft = false;
+      if (state !== 'JUMP') setState('JUMP');
+    } else if (state === 'JUMP_START') {
+      // Takeoff is animation-locked for a few frames before vertical motion.
+      vx = dir * RUN_SPEED * 0.58;
+      if (stateTime >= JUMP_TAKEOFF_TIME) {
+        grounded = false;
+        vy = JUMP_VELOCITY;
+        setState('JUMP');
+      }
+    } else if (state === 'LAND' && stateTime < LAND_TIME) {
+      vx = 0;
+    } else if (state === 'ROLL_START') {
+      facingLeft = rollDir < 0;
+      rollVelocity = Math.min(ROLL_SPEED, rollVelocity + ROLL_ACCEL * dt);
+      vx = rollDir * rollVelocity;
+      if (stateTime >= ROLL_START_TIME) {
+        setState(roll ? 'ROLL' : 'ROLL_STOP');
+      }
+    } else if (state === 'ROLL') {
+      facingLeft = rollDir < 0;
+      rollVelocity = ROLL_SPEED;
+      vx = rollDir * rollVelocity;
+      // Direction is locked for the active roll. Releasing or reversing
+      // input finishes the roll through the stop animation first.
+      if (!roll || dir === 0 || dir !== rollDir) {
+        setState('ROLL_STOP');
+      }
+    } else if (state === 'ROLL_STOP') {
+      facingLeft = rollDir < 0;
+      rollVelocity = Math.max(0, rollVelocity - ROLL_BRAKE * dt);
+      vx = rollDir * rollVelocity;
+      if (stateTime >= ROLL_STOP_TIME || rollVelocity <= 20) {
+        rollVelocity = 0;
+        setState(groundedStateFromInput(dir, crouch, false));
+      }
+    } else if (roll && dir !== 0) {
+      rollDir = dir;
+      rollVelocity = Math.max(Math.abs(vx), RUN_SPEED * 0.55);
+      setState('ROLL_START');
+      vx = rollDir * rollVelocity;
+    } else if (crouch && dir !== 0) {
+      if (state !== 'CRAWL_START' && state !== 'CRAWL') {
+        setState('CRAWL_START');
+      }
+      vx = dir * (state === 'CRAWL_START' ? CRAWL_SPEED * 0.88 : CRAWL_SPEED);
+      if (dir < 0) facingLeft = true;
+      else if (dir > 0) facingLeft = false;
+      if (state === 'CRAWL_START' && stateTime >= CRAWL_ENTER_TIME) {
+        setState('CRAWL');
+      }
+    } else if (crouch) {
+      vx = 0;
+      setState('CROUCH');
+    } else if (dir !== 0) {
+      vx = dir * RUN_SPEED;
+      setState('RUN');
+    } else {
+      vx = 0;
+      setState('IDLE');
+    }
+
+    footX += vx * dt;
+    footX = Math.max(FLOOR_LEFT, Math.min(FLOOR_RIGHT, footX));
+
+    if (!grounded) {
+      vy += GRAVITY * dt;
+      footY += vy * dt;
+      if (footY >= FLOOR_Y) {
+        footY = FLOOR_Y;
+        vy = 0;
+        grounded = true;
+        rollVelocity = 0;
+        setState('LAND');
+        beep(145, .028, 'triangle');
+      }
+    } else {
+      footY = FLOOR_Y;
+      vy = 0;
+      if (state === 'LAND' && stateTime >= LAND_TIME) {
+        setState(groundedStateFromInput(dir, crouch, roll));
+      }
+    }
+
+    updateAnimation(dt);
+    render();
+    updatePrompts();
+  }
+
+  let last = performance.now();
+  let accumulator = 0;
+
+  function loop(now) {
+    let frame = Math.min(.1, (now - last) / 1000);
+    last = now;
+    accumulator += frame;
+
+    while (accumulator >= FIXED_DT) {
+      updatePhysics(FIXED_DT);
+      accumulator -= FIXED_DT;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function releaseTouchPointer(pointerId) {
+    const held = touchPointerKeys.get(pointerId);
+    if (!held) return;
+    keys.delete(held.code);
+    held.button.classList.remove('pressed');
+    touchPointerKeys.delete(pointerId);
+  }
+
+  function bindTouchControls() {
+    touchControls.querySelectorAll('.touchBtn').forEach(button => {
+      button.addEventListener('contextmenu', e => e.preventDefault());
+
+      button.addEventListener('pointerdown', e => {
+        if (interacting) return;
+        e.preventDefault();
+        button.setPointerCapture?.(e.pointerId);
+        button.classList.add('pressed');
+
+        const code = button.dataset.hold;
+        const action = button.dataset.action;
+
+        if (code) {
+          keys.add(code);
+          touchPointerKeys.set(e.pointerId, { code, button });
+          return;
+        }
+
+        if (action === 'jump') {
+          beginJump();
+          beep(330, .025, 'square');
+        } else if (action === 'interact') {
+          interact();
+        }
+      });
+
+      const endPointer = e => {
+        e.preventDefault();
+        releaseTouchPointer(e.pointerId);
+        button.classList.remove('pressed');
+      };
+      button.addEventListener('pointerup', endPointer);
+      button.addEventListener('pointercancel', endPointer);
+      button.addEventListener('lostpointercapture', endPointer);
+    });
+  }
+
+  bindTouchControls();
+
+  document.addEventListener('keydown', e => {
+    const gameplayCodes = new Set([
+      'ArrowLeft','ArrowRight','ArrowUp','ArrowDown',
+      'KeyA','KeyD','KeyW','KeyS','KeyR',
+      'Space','ShiftLeft','ShiftRight','Enter','KeyE'
+    ]);
+    if (gameplayCodes.has(e.code)) e.preventDefault();
+
+    if (interacting) {
+      if (e.code === 'Escape') {
+        beep(220, .05);
+        closeModal();
+        return;
+      }
+      if (weaponList.children.length) {
+        if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+          weaponFocus = (weaponFocus + weapons.length - 1) % weapons.length;
+          renderWeaponOptions();
+          beep(330, .035);
+          return;
+        }
+        if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+          weaponFocus = (weaponFocus + 1) % weapons.length;
+          renderWeaponOptions();
+          beep(330, .035);
+          return;
+        }
+        if (e.code === 'Enter' || e.code === 'Space') {
+          equipFocusedWeapon();
+          return;
+        }
+      }
+      return;
+    }
+
+    keys.add(e.code);
+
+    if (!e.repeat && (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW')) {
+      beginJump();
+    }
+
+    if (!e.repeat && (e.code === 'KeyE' || e.code === 'Enter')) {
+      interact();
+    }
+  });
+
+  document.addEventListener('keyup', e => {
+    keys.delete(e.code);
+  });
+
+  window.addEventListener('blur', () => {
+    keys.clear();
+    touchPointerKeys.clear();
+    touchControls.querySelectorAll('.pressed').forEach(btn => btn.classList.remove('pressed'));
+  });
+
+  Object.keys(prompts).forEach(id => {
+    prompts[id].addEventListener('click', () => {
+      const z = zones.find(zz => zz.id === id);
+      if (!z) return;
+      if (z.id === 'bed') doRest();
+      else if (z.id === 'desk') doSave();
+      else if (z.id === 'pod') doWeapon();
+    });
+  });
+
+  async function init() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('isopod_x_level0') || 'null');
+      if (saved) {
+        if (Number.isFinite(saved.footX)) footX = saved.footX;
+        if (weapons.some(w => w.id === saved.equippedWeapon)) {
+          equippedWeapon = saved.equippedWeapon;
+          hudWeapon.textContent = weapons.find(w => w.id === equippedWeapon).name;
+        }
+      }
+    } catch (_) {}
+
+    RAW_FRAMES = await loadFrameAtlasSources();
+    const processed = await preprocessFrames(RAW_FRAMES);
+    FRAMES = processed.frames;
+    applySpriteBounds(processed.maxVisibleW);
+    assetsReady = true;
+
+    selectFrame(0, IDLE_FRAMES[0]);
+    render();
+    updatePrompts();
+    requestAnimationFrame(loop);
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>
